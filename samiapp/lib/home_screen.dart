@@ -1,89 +1,128 @@
-import 'package:samiapp/chat_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../database/db_helper.dart';
+import 'chat_screen.dart';
 
-class HomeScreen extends StatelessWidget {
-  final User currentUser = FirebaseAuth.instance.currentUser!;
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int currentUserId = 1;
+  String currentUserName = "User";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      currentUserId = prefs.getInt('currentUserId') ?? 1;
+      currentUserName = prefs.getString('currentUserName') ?? "User";
+    });
+  }
+
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    Navigator.pushReplacementNamed(context, '/login');
+  }
+
+  Widget _gameButton(String title, String route) {
+    return SizedBox(
+      width: 110,
+      child: ElevatedButton(
+        onPressed: () => Navigator.pushNamed(context, route),
+        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+        child: FittedBox(child: Text(title, style: const TextStyle(fontSize: 13))),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🔥 Chat App'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
-        ],
+        title: Text('Hi $currentUserName'),
+        actions: [IconButton(icon: const Icon(Icons.logout), onPressed: _logout)],
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
       ),
       body: Column(
         children: [
-          // New section for games
+          // GAMES SECTION — FIXED
           Container(
-            padding: const EdgeInsets.all(16.0),
-            color: Colors.lightBlue[50],
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            color: Colors.blue[50],
             child: Column(
               children: [
-                const Text(
-                  'Fun Games for Kids!',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pushNamed(context, '/tic-tac-toe'),
-                      child: const Text('Tic-Tac-Toe'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pushNamed(context, '/memory-match'),
-                      child: const Text('Memory Match'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pushNamed(context, '/number-guessing'),
-                      child: const Text('Number Guess'),
-                    ),
-                  ],
+                const Text('Fun Games!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue)),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 500) {
+                      return Column(children: [
+                        _gameButton('Tic-Tac-Toe', '/tic-tac-toe'),
+                        const SizedBox(height: 8),
+                        _gameButton('Memory Match', '/memory-match'),
+                        const SizedBox(height: 8),
+                        _gameButton('Number Guess', '/number-guessing'),
+                        const SizedBox(height: 8),
+                        _gameButton('Snake Game', '/snake'),
+                        const SizedBox(height: 8),
+                        _gameButton('Quiz Game', '/quiz'),
+                      ]);
+                    }
+                    return Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                      _gameButton('Tic-Tac-Toe', '/tic-tac-toe'),
+                      _gameButton('Memory Match', '/memory-match'),
+                      _gameButton('Number Guess', '/number-guessing'),
+                      _gameButton('Snake Game', '/snake'),
+                      _gameButton('Quiz Game', '/quiz'),
+                    ]);
+                  },
                 ),
               ],
             ),
           ),
-          // Existing user list
+
+          // USERS LIST
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('users').snapshots(),
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: DBHelper.instance.getAllUsersExcept(currentUserId),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return const Center(child: Text('Error loading users'));
-                }
-                final users = snapshot.data!.docs.where((doc) => doc.id != currentUser.uid).toList();
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final users = snapshot.data!;
                 return ListView.builder(
                   itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final user = users[index];
-                    return ListTile(
-                      title: Text(user['name'] ?? 'Unknown'),
-                      subtitle: Text(user['email'] ?? ''),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(
-                              currentUserId: user.id,
-                              otherUserName: user['name'] ?? 'Unknown', otherUserId: '',
+                  itemBuilder: (context, i) {
+                    final user = users[i];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(child: Text(user['name'][0])),
+                        title: Text(user['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(user['email']),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                currentUserId: currentUserId.toString(),
+                                otherUserId: user['id'].toString(),
+                                otherUserName: user['name'],
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     );
                   },
                 );
