@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:samiapp/database/db_helper.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -9,44 +10,24 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final _emailController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _showAccounts = false;
 
-  Future<void> _resetPassword() async {
-    String email = _emailController.text.trim();
-    if (!_formKey.currentState!.validate()) return;
+  // Clear login session
+  Future<void> _clearLoginAndGoHome() async {
+    setState(() => _isLoading = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
 
-    try {
-      if (email.isEmpty) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Pls enter your email!')));
-        return;
-      }
-      setState(() {
-        _isLoading = true;
-      });
-
-      await _auth.sendPasswordResetEmail(email: email);
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Reset Password sent to $email')));
-    } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('${e.message}')));
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+        const SnackBar(
+          content: Text('Login cleared! You can now log in with any account'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     }
-
-    return;
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    super.dispose();
   }
 
   @override
@@ -62,57 +43,135 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 50),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'Forgot Password',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 40),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    filled: true, // Enable background fill
-                    fillColor: Colors.white, // Set background color to white
-                    prefixIcon: Icon(Icons.email_outlined),
-                    labelText: 'Email',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_open, size: 80, color: Colors.blue),
+              const SizedBox(height: 30),
+              const Text(
+                'Forgot Password?',
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'This is an offline app.\nWe cannot send password reset emails.\n\nBut don\'t worry! You can:',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 40),
+
+              // Button 1: Show All Accounts
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => setState(() => _showAccounts = true),
+                  icon: const Icon(Icons.people_outline),
+                  label: const Text("See All Saved Accounts"),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.blue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) => value == null || !value.contains('@')
-                      ? 'Enter a valid email'
-                      : null,
                 ),
-                const SizedBox(height: 20),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _resetPassword,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Colors.blue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+              ),
+              const SizedBox(height: 16),
+
+              // Button 2: Clear Login
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _clearLoginAndGoHome,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text("Clear Login & Start Fresh"),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: Colors.blue),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2),
-                          )
-                        : const Text("Send"),
                   ),
                 ),
-              ],
-            ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // Show List of All Accounts
+              if (_showAccounts)
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black12, blurRadius: 10)
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "All Saved Accounts",
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const Divider(),
+                        const Text("Default password: 123456", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child: FutureBuilder<List<Map<String, dynamic>>>(
+                            future: DBHelper.instance.database.then((db) => db.query('users')),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const Center(child: CircularProgressIndicator());
+                              }
+                              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                                return const Text("No accounts found");
+                              }
+
+                              final users = snapshot.data!;
+                              return ListView.builder(
+                                itemCount: users.length,
+                                itemBuilder: (context, i) {
+                                  final user = users[i];
+                                  return Card(
+                                    child: ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundColor: Colors.blue,
+                                        child: Text(
+                                          user['name'][0].toUpperCase(),
+                                          style: const TextStyle(color: Colors.white),
+                                        ),
+                                      ),
+                                      title: Text(user['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      subtitle: Text(user['email']),
+                                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                      onTap: () async {
+                                        final prefs = await SharedPreferences.getInstance();
+                                        await prefs.setInt('currentUserId', user['id']);
+                                        await prefs.setString('currentUserName', user['name']);
+
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Logged in as ${user['name']}')),
+                                          );
+                                          Navigator.pushNamedAndRemoveUntil(context, '/home', (r) => false);
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

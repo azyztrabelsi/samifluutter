@@ -1,6 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../database/db_helper.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -10,157 +10,69 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _pass = TextEditingController();
+  final _pin = TextEditingController(); // NEW
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  bool _loading = false;
 
-  bool _isLoading = false;
+  Future<void> _signup() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _loading = true);
 
-  Future<void> _signUp() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+    final id = await DBHelper.instance.insertUser({
+      'name': _name.text.trim(),
+      'email': _email.text.trim(),
+      'password': _pass.text.trim(),
+      'pin': _pin.text.isEmpty ? null : _pin.text.trim(), // Save PIN
+    });
 
-      try {
-        final credential =
-            await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('currentUserId', id);
+    await prefs.setString('currentUserName', _name.text.trim());
 
-        await credential.user!.updateDisplayName(_nameController.text.trim());
-        await credential.user!.reload();
-
-        // 👇 Add user data to Firestore
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(credential.user!.uid)
-            .set({
-          'uid': credential.user!.uid,
-          'name': _nameController.text.trim(),
-          'email': _emailController.text.trim(),
-        });
-
-        Navigator.pushNamed(context, '/home');
-      } on FirebaseAuthException catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message ?? 'Registration failed')),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      } finally {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+    if (mounted) Navigator.pushReplacementNamed(context, '/home');
+    setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFEEF2F7),
-      resizeToAvoidBottomInset: false,
+      appBar: AppBar(title: const Text('Sign Up'), backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+          padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: ListView(
               children: [
-                const Text(
-                  'Sign Up',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 50),
+                const Text('Create Account', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 40),
+                TextFormField(controller: _name, decoration: const InputDecoration(labelText: 'Full Name', filled: true, fillColor: Colors.white)),
+                const SizedBox(height: 16),
+                TextFormField(controller: _email, decoration: const InputDecoration(labelText: 'Email', filled: true, fillColor: Colors.white), validator: (v) => v!.contains('@') ? null : 'Invalid email'),
+                const SizedBox(height: 16),
+                TextFormField(controller: _pass, obscureText: true, decoration: const InputDecoration(labelText: 'Password', filled: true, fillColor: Colors.white), validator: (v) => v!.length >= 6 ? null : 'Min 6 chars'),
+                const SizedBox(height: 16),
                 TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    filled: true, // Enable background fill
-                    fillColor: Colors.white, // Set background color to white
-                    prefixIcon: Icon(Icons.person_outline),
-                    labelText: 'Full Name',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                    ),
+                  controller: _pin,
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  decoration: InputDecoration(
+                    labelText: 'Set 4-Digit PIN (Optional)',
+                    hintText: '1234',
+                    filled: true,
+                    fillColor: Colors.white,
+                    prefixIcon: const Icon(Icons.lock_outline),
                   ),
-                  validator: (value) =>
-                      value!.isEmpty ? 'Enter your full name' : null,
                 ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    filled: true, // Enable background fill
-                    fillColor: Colors.white, // Set background color to white
-                    prefixIcon: Icon(Icons.email_outlined),
-                    labelText: 'Email',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                    ),
-                  ),
-                  validator: (value) =>
-                      value!.isEmpty ? 'Enter your email' : null,
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    filled: true, // Enable background fill
-                    fillColor: Colors.white, // Set background color to white
-                    prefixIcon: Icon(Icons.lock_outline),
-                    labelText: 'Password',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                    ),
-                  ),
-                  validator: (value) =>
-                      value!.length < 6 ? 'Minimum 6 characters' : null,
-                ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _signUp,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.blue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
-                        )
-                      : const Text("Sign Up"),
+                  onPressed: _loading ? null : _signup,
+                  child: _loading ? const CircularProgressIndicator(color: Colors.white) : const Text('Create Account'),
                 ),
-                const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Already have an account? "),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                      child: const Text(
-                        "Login",
-                        style: TextStyle(color: Colors.blue),
-                      ),
-                    ),
-                  ],
-                )
               ],
             ),
           ),

@@ -1,7 +1,7 @@
-import 'package:samiapp/home_screen.dart';
-import 'package:samiapp/login_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'home_screen.dart';
+import 'login_screen.dart';
 
 class WrapperScreen extends StatefulWidget {
   const WrapperScreen({super.key});
@@ -11,19 +11,26 @@ class WrapperScreen extends StatefulWidget {
 }
 
 class _WrapperScreenState extends State<WrapperScreen> {
+  bool _loading = true;
+  bool _loggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLogin();
+  }
+
+  Future<void> _checkLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _loggedIn = prefs.getInt('currentUserId') != null;
+      _loading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return CircularProgressIndicator(); // Loading
-        }
-        if (snapshot.hasData) {
-          return HomeScreen(); // User is logged in
-        }
-        return LoginScreen(); // User is not logged in
-      },
-    );
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return _loggedIn ? const HomeScreen() : const LoginScreen();
   }
 }
